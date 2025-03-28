@@ -1,17 +1,38 @@
+import { contextBridge, ipcRenderer } from "electron";
+
 const electron = require('electron');
 
-electron.contextBridge.exposeInMainWorld('electron', {
-  subscribeStatistics: (callback) =>
-    ipcOn('statistics', (stats) => {
-      callback(stats);
-    }),
-  subscribeChangeView: (callback) =>
-    ipcOn('changeView', (view) => {
-      callback(view);
-    }),
-  getStaticData: () => ipcInvoke('getStaticData'),
-  sendFrameAction: (payload) => ipcSend('sendFrameAction', payload),
-} satisfies Window['electron']);
+// Update your Window interface
+interface Window {
+  electron: {
+    subscribeStatistics: (
+      callback: (statistics: Statistics) => void
+    ) => UnsubscribeFunction;
+    getStaticData: () => Promise<StaticData>;
+    subscribeChangeView: (
+      callback: (view: View) => void
+    ) => UnsubscribeFunction;
+    sendFrameAction: (payload: FrameWindowAction) => void;
+    fetchReceipts: () => Promise<ApiResponse<Receipt[]>>; // Fixed - removed duplicate and made it a function
+  };
+}
+
+
+contextBridge.exposeInMainWorld('electron', {
+  subscribeStatistics: (callback: any) => {
+    const handler = (_: Electron.IpcRendererEvent, stats: Statistics) => callback(stats);
+    ipcRenderer.on('statistics', handler);
+    return () => ipcRenderer.off('statistics', handler);
+  },
+  subscribeChangeView: (callback: any) => {
+    const handler = (_: Electron.IpcRendererEvent, view: View) => callback(view);
+    ipcRenderer.on('changeView', handler);
+    return () => ipcRenderer.off('changeView', handler);
+  },
+  getStaticData: () => ipcRenderer.invoke('getStaticData'),
+  sendFrameAction: (payload: any) => ipcRenderer.send('sendFrameAction', payload),
+  fetchReceipts: () => ipcRenderer.invoke('fetchReceipts')
+});
 
 function ipcInvoke<Key extends keyof EventPayloadMapping>(
   key: Key

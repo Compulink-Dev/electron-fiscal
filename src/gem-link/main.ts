@@ -1,20 +1,18 @@
-import { app, BrowserWindow, Menu } from 'electron';
-
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { getStaticData, pollResources } from './resourceManager.js';
 import { getPreloadPath, getUIPath } from './pathResolver.js';
 import { createTray } from './tray.js';
 import { ipcMainHandle, ipcMainOn, isDev } from './utils.js';
 import { createMenu } from './menu.js';
 
-
 app.on('ready', () => {
   const mainWindow = new BrowserWindow({
     webPreferences: {
       preload: getPreloadPath(),
     },
-    // disables default system frame (dont do this if you want a proper working menu bar)
     frame: false,
   });
+
   if (isDev()) {
     mainWindow.loadURL('http://localhost:5123');
   } else {
@@ -26,6 +24,29 @@ app.on('ready', () => {
   ipcMainHandle('getStaticData', () => {
     return getStaticData();
   });
+
+// main.ts
+ipcMain.handle('fetchReceipts', async (): Promise<ApiResponse<Receipt[]>> => {
+  try {
+    const response = await fetch('https://next-fiscalgem.vercel.app/api/storage');
+    const data = await response.json();
+    return {
+      success: true,
+      data: Array.isArray(data) ? data : (data.data || [])
+    };
+  } catch (error) {
+    console.error('Failed to fetch receipts:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to fetch receipts'
+    };
+  }
+});
+
+// // Add this to send view changes
+// function sendViewChange(view: View) {
+//   mainWindow?.webContents.send('changeView', view);
+// }
 
   ipcMainOn('sendFrameAction', (payload: any) => {
     switch (payload) {
